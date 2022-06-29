@@ -732,7 +732,11 @@ public class RpcContext {
                     if (o instanceof CompletableFuture) {
                         return (CompletableFuture<T>) o;
                     }
-                    return CompletableFuture.completedFuture(o);
+                    // not only local invoke will return directly, when return type of method is primitive type,
+                    // the proxy will convert null to default value of primitive type. therefore, should not return a completed Future when protocol is not injvm
+                    if (Constants.LOCAL_PROTOCOL.equals(url.getProtocol())) {
+                        return CompletableFuture.completedFuture(o);
+                    }
                 } else {
                     // The service has a normal sync method signature, should get future from RpcContext.
                 }
@@ -768,6 +772,7 @@ public class RpcContext {
 
     /**
      * @return
+     *
      * @throws IllegalStateException
      */
     @SuppressWarnings("unchecked")
