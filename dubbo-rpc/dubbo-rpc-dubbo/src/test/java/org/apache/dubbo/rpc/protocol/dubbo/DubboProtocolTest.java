@@ -23,6 +23,7 @@ import org.apache.dubbo.common.utils.NetUtils;
 import org.apache.dubbo.remoting.Constants;
 import org.apache.dubbo.rpc.Protocol;
 import org.apache.dubbo.rpc.ProxyFactory;
+import org.apache.dubbo.rpc.RpcContext;
 import org.apache.dubbo.rpc.RpcException;
 import org.apache.dubbo.rpc.model.ApplicationModel;
 import org.apache.dubbo.rpc.protocol.dubbo.support.DemoService;
@@ -43,6 +44,7 @@ import org.junit.jupiter.api.Test;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -256,5 +258,26 @@ public class DubboProtocolTest {
             Assertions.assertTrue(expected.getMessage().contains("Data length too large"));
         }
 
+    }
+
+    @Test
+    public void testDubboProtocolAsyncCall() throws Exception {
+        DemoService service = new DemoServiceImpl();
+        int port = NetUtils.getAvailablePort();
+        protocol.export(proxy.getInvoker(service, DemoService.class, URL.valueOf("dubbo://127.0.0.1:" + port + "/" + DemoService.class.getName() + "?codec=exchange")));
+        service = proxy.getProxy(protocol.refer(DemoService.class, URL.valueOf("dubbo://127.0.0.1:" + port + "/" + DemoService.class.getName() + "?codec=exchange").addParameter("timeout",
+                3000L).addParameter("async", true)));
+
+        service.getSize(new String[]{"", "", ""});
+        CompletableFuture<Integer> future = RpcContext.getContext().getCompletableFuture();
+        Integer futureResult = future.get();
+
+        DemoService finalService = service;
+        Integer asyncResult = RpcContext.getContext().asyncCall(
+                () -> finalService.getSize(new String[]{"", "", ""})
+        ).get();
+
+        assertEquals(futureResult, 3);
+        assertEquals(futureResult, asyncResult);
     }
 }

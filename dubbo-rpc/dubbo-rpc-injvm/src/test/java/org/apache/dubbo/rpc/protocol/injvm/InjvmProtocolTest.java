@@ -23,15 +23,16 @@ import org.apache.dubbo.rpc.Exporter;
 import org.apache.dubbo.rpc.Invoker;
 import org.apache.dubbo.rpc.Protocol;
 import org.apache.dubbo.rpc.ProxyFactory;
-
+import org.apache.dubbo.rpc.RpcContext;
 import org.apache.dubbo.rpc.protocol.DelegateExporterMap;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 import static org.apache.dubbo.common.constants.CommonConstants.GROUP_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.INTERFACE_KEY;
@@ -173,5 +174,29 @@ public class InjvmProtocolTest {
         exporters.add(exporter);
         service = proxy.getProxy(protocol.refer(DemoService.class, url));
         assertNull(service.getAsyncResult());
+    }
+
+    @Test
+    public void testLocalProtocolAsyncCall() throws Exception {
+        DemoService service = new DemoServiceImpl();
+        URL url = URL.valueOf("injvm://127.0.0.1/TestService")
+                .addParameter(INTERFACE_KEY, DemoService.class.getName()).addParameter("application", "consumer");
+        Invoker<?> invoker = proxy.getInvoker(service, DemoService.class, url);
+        assertTrue(invoker.isAvailable());
+        Exporter<?> exporter = protocol.export(invoker);
+        exporters.add(exporter);
+        service = proxy.getProxy(protocol.refer(DemoService.class,  url.addParameter(ASYNC_KEY, true)));
+
+        service.getSize(new String[]{"", "", ""});
+        CompletableFuture<Integer> future = RpcContext.getContext().getCompletableFuture();
+        Integer futureResult = future.get();
+
+        DemoService finalService = proxy.getProxy(protocol.refer(DemoService.class, url.removeParameter(ASYNC_KEY)));
+        Integer asyncResult = RpcContext.getContext().asyncCall(
+                () -> finalService.getSize(new String[]{"", "", ""})
+        ).get();
+
+        assertEquals(futureResult, 3);
+        assertEquals(futureResult, asyncResult);
     }
 }
